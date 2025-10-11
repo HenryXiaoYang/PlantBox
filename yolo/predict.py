@@ -56,7 +56,7 @@ while cap.isOpened():
                 detected_boxes.append(box)
 
         # 对检测框进行聚类 (使用DBSCAN)
-        clustered_boxes = cluster_boxes_dbscan(detected_boxes, eps=150, min_samples=3)
+        clustered_boxes = cluster_boxes_dbscan(detected_boxes, eps=80, min_samples=2)
         
         # 打印调试信息
         if detected_boxes:

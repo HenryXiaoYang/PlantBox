@@ -59,8 +59,7 @@ def status():
             'z': state['motor'].current_z,
             'servo_1': state['motor'].current_servo_1,
             'servo_2': state['motor'].current_servo_2,
-            'servo_3': state['motor'].current_servo_3,
-            'claw': state['motor'].current_claw
+            'servo_3': state['motor'].current_servo_3
         }
 
     return jsonify({
@@ -90,8 +89,7 @@ def motor_command():
 
     data = request.json
     try:
-        claw = data.get('claw', 0)
-        command = f"{data['x']},{data['y']},{data['z']},{data['servo_1']},{data['servo_2']},{data['servo_3']},{claw}\n"
+        command = f"{data['x']},{data['y']},{data['z']},{data['servo_1']},{data['servo_2']},{data['servo_3']}\n"
         state['motor'].ser.write(command.encode())
         state['motor'].current_x = data['x']
         state['motor'].current_y = data['y']
@@ -99,7 +97,6 @@ def motor_command():
         state['motor'].current_servo_1 = data['servo_1']
         state['motor'].current_servo_2 = data['servo_2']
         state['motor'].current_servo_3 = data['servo_3']
-        state['motor'].current_claw = claw
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
@@ -131,8 +128,7 @@ def emit_status_updates():
                 'z': state['motor'].current_z,
                 'servo_1': state['motor'].current_servo_1,
                 'servo_2': state['motor'].current_servo_2,
-                'servo_3': state['motor'].current_servo_3,
-                'claw': state['motor'].current_claw
+                'servo_3': state['motor'].current_servo_3
             }
 
         socketio.emit('status_update', {

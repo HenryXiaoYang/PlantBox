@@ -1,7 +1,7 @@
 import numpy as np
 from sklearn.cluster import DBSCAN
 
-def cluster_boxes_dbscan(boxes, eps=50, min_samples=2):
+def cluster_boxes_dbscan(boxes, eps=80, min_samples=2):
     if not boxes or len(boxes) < 2:
         return [[box] for box in boxes] if boxes else []
 
