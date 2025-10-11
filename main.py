@@ -1,83 +1,77 @@
 import os
-import re
-import threading
 import time
+
 import cv2
-import numpy as np
-from cv2_enumerate_cameras import enumerate_cameras
+import schedule
 from dotenv import load_dotenv
 from loguru import logger
-import Common
-from Agent.PlantRecognition import PlantRecognitionAgent
-from Agent.PlantRequirements import PlantRequirementsAgent
-from Common import GlobalState, PlantBoxSerial
-from Common import scheduler
+from cv2_enumerate_cameras import enumerate_cameras
+
+from agent.PlantRecognition import PlantRecognitionAgent
+from agent.PlantRequirements import PlantRequirementsAgent
 from EnvActuator import ActuatorManager
+from common import GlobalState
+from common import scheduler
 from MotorContol.motor_control import MotorControl
-from Sensors.packed_sensor_input import get_packed_sensor_input
-from Yolo import detect_plants, get_model
-from Common.dbscan import cluster_boxes_dbscan
-from app import run_flask_server, state as flask_state, serial_output_callback
-from app import socketio
-from Common.cluster_merge import merge_clusters_across_positions
-from Jobs import experiment_1, experiment_2, init_plant_scan, init_plant_scan, job
+from yolo import detect_plants
 
 def main():
-    # Start Flask server in background thread
-    flask_thread = threading.Thread(target=run_flask_server, daemon=True)
-    flask_thread.start()
-    logger.info("Flask server started on http://0.0.0.0:5000")
+    task = scheduler.every(10).minutes.do(job)
+    task.run()
 
-    init_plant_scan(cam, motor, flask_state, socketio, recognition_agent, requirements_agent, manager)
-
-    task = scheduler.every(6).hours.do(lambda: job(cam, motor, manager, flask_state,recognition_agent, requirements_agent, socketio))
     try:
         while True:
-            if flask_state['job_control'].get('run_now'):
-                flask_state['job_control']['run_now'] = False
             scheduler.run_pending()
-            # Update sensor data
-            temp, humidity, soil_humidity = get_packed_sensor_input()
-            flask_state['sensor_data'] = {
-                'temperature': temp,
-                'humidity': humidity,
-                'soil_humidity': soil_humidity
-            }
             time.sleep(1)
     except KeyboardInterrupt:
         logger.info("Shutting down...")
         GlobalState().is_shutting_down = True
         cam.release()
 
+
+def job():
+    logger.info("Starting job")
+    step_x, step_y = 0.5, 0.5
+
+    for x in [i * step_x for i in range(int(9.5 / step_x) + 1)]:
+        for y in [j * step_y for j in range(int(9.0 / step_y) + 1)]:
+            motor.move_to(x, y, 0.5)
+
+            if not cam.isOpened():
+                raise IOError("Cannot open webcam")
+            ret, frame = cam.read()
+
+            if not ret:
+                logger.warning(f"Failed to capture at ({x}, {y})")
+                continue
+
+            clusters = detect_plants(frame)
+            if clusters:
+                plant = recognition_agent.regocnize_plant(frame)
+                logger.info(f"At ({x}, {y}): {len(clusters)} clusters, {plant.plant_name}, {plant.growth_stage}")
+
+                requirements = requirements_agent.get_requirements(plant.plant_name, plant.growth_stage)
+                logger.info(f"Requirements: {requirements}")
+
+                manager.update(requirements)
+
+
 if __name__ == "__main__":
     load_dotenv()
 
-    ser = Common.PlantBoxSerial(port='COM8', baudrate=115200, serial_callback=serial_output_callback)
-
-    cam_index = -1
-    for cam in enumerate_cameras():
-        if cam.name == "MF500 camera":
-            cam_index = cam.index
-            break
-
-    if cam_index == -1:
-        for camera_info in enumerate_cameras():
-            logger.info(f"Camera index: {camera_info.index}  Name: {camera_info.name}")
-        cam_index = int(input("Please enter the camera index to use and press Enter: "))
-
+    for camera_info in enumerate_cameras():
+        logger.info(f"Camera index: {camera_info.index}  Name: {camera_info.name}")
+    time.sleep(1)  # Give user time to read the camera list
+    cam_index = int(input("Please enter the camera index to use and press Enter: "))
     cam = cv2.VideoCapture(cam_index)
 
     recognition_agent = PlantRecognitionAgent(api_key=os.getenv("OPENAI_API_KEY"),
                                               base_url=os.getenv("OPENAI_API_BASE"))
     requirements_agent = PlantRequirementsAgent(api_key=os.getenv("OPENAI_API_KEY"),
-                                                base_url=os.getenv("OPENAI_API_BASE"))
+                                                base_url=os.getenv("OPENAI_API_BASE"),
+                                                firecrawl_api_key=os.getenv("FIRECRAWL_API_KEY"))
 
     manager = ActuatorManager()
-
-    motor = MotorControl(ser, 10, 25, 0)
-
-    # Share camera and motor with Flask
-    flask_state['camera'] = cam
-    flask_state['motor'] = motor
+    motor = MotorControl()
 
     main()

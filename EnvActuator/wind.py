@@ -1,7 +1,7 @@
 import threading
 import time
 from loguru import logger
-from Common import GlobalState
+from common import GlobalState
 
 
 class WindActuator:

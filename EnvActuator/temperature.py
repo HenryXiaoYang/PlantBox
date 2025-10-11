@@ -1,8 +1,8 @@
 import threading
 import time
 from loguru import logger
-from Common import GlobalState
-import Sensors
+from common import GlobalState
+import sensors
 
 
 class TemperatureActuator:
@@ -27,7 +27,7 @@ class TemperatureActuator:
         """Continuously manage temperature based on the set temperature."""
         while not GlobalState().is_shutting_down:
             if self.target_temperature > 0:
-                current_temp = Sensors.get_sensor_temperature()
+                current_temp = sensors.get_sensor_temperature()
                 if current_temp < self.target_temperature - self._difference_threshold and not self.is_heater_on:
                     self.provide_heat()
                 elif current_temp > self.target_temperature + self._difference_threshold and self.is_heater_on:
