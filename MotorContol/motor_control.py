@@ -1,10 +1,7 @@
-import time
-from serial import Serial
-from Common import singleton
+from Common import Singleton, PlantBoxSerial
 
-@singleton
-class MotorControl:
-    def __init__(self, port='COM3', baudrate=115200, serial_callback=None, servo_1_offset=0, servo_2_offset=0, servo_3_offset=0):
+class MotorControl(metaclass=Singleton):
+    def __init__(self, plant_box_serial:PlantBoxSerial, servo_1_offset=0, servo_2_offset=0, servo_3_offset=0):
         self.current_x = 0.0
         self.current_y = 0.0
         self.current_z = 0.0
@@ -14,23 +11,7 @@ class MotorControl:
         self.servo_1_offset = servo_1_offset
         self.servo_2_offset = servo_2_offset
         self.servo_3_offset = servo_3_offset
-        self.ser = Serial(port, baudrate, timeout=1)
-        self.serial_callback = serial_callback
-        time.sleep(2)
-        if serial_callback:
-            import threading
-            threading.Thread(target=self._read_serial, daemon=True).start()
-
-    def _read_serial(self):
-        while True:
-            if self.ser.in_waiting:
-                try:
-                    line = self.ser.readline().decode().strip()
-                    if line and self.serial_callback:
-                        self.serial_callback(line)
-                except:
-                    pass
-            time.sleep(0.1)
+        self.ser = plant_box_serial
 
     def move_to(self, x: float, y: float, z: float):
         if not (0 <= x <= 9.5):

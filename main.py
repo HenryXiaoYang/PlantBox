@@ -7,6 +7,7 @@ from cv2_enumerate_cameras import enumerate_cameras
 from dotenv import load_dotenv
 from loguru import logger
 
+import Common
 from Agent.PlantRecognition import PlantRecognitionAgent
 from Agent.PlantRequirements import PlantRequirementsAgent
 from Common import GlobalState
@@ -196,7 +197,7 @@ def job():
             flask_state['target_env'] = {
                 'watering_frequency': requirements.watering_frequency,
                 'watering_amount': requirements.watering_amount,
-                'sunlight': requirements.sunlight,
+                'light_duration': requirements.light_duration,
                 'temperature': requirements.temperature,
                 'fertilization_frequency': requirements.fertilization_frequency,
                 'fertilization_amount': requirements.fertilization_amount,
@@ -212,6 +213,9 @@ def job():
 
 if __name__ == "__main__":
     load_dotenv()
+
+    ser = Common.PlantBoxSerial(port='COM3', baudrate=115200, serial_callback=serial_output_callback)
+
     cam_index = -1
     for cam in enumerate_cameras():
         if cam.name == "MF500 camera":
@@ -232,7 +236,8 @@ if __name__ == "__main__":
                                                 firecrawl_api_key=os.getenv("FIRECRAWL_API_KEY"))
 
     manager = ActuatorManager()
-    motor = MotorControl(servo_1_offset=15, servo_2_offset=25, serial_callback=serial_output_callback)
+
+    motor = MotorControl(ser, 10, 25, 0)
 
     # Share camera and motor with Flask
     flask_state['camera'] = cam

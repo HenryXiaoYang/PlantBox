@@ -16,7 +16,7 @@ class FertilizationActuator:
         logger.info("Fertilization managing actuator initialized.")
 
     def update_fertilization(self, frequency: float, amount: float):
-        """Update sunlight duration in hours."""
+        """Update light_duration duration in hours."""
         self.fertilization_frequency = frequency
         self.fertilization_amount = amount
         logger.info(f"Fertilization updated: frequency={frequency} days, amount={amount} ml")
