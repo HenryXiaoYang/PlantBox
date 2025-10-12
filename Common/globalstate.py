@@ -6,3 +6,4 @@ class GlobalState(metaclass=Singleton):
         self.is_shutting_down = False
         self.serial_command_lock = Lock()
         self.serial_command = (0,0,0)
+        self.scan_data = []

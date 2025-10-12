@@ -3,6 +3,7 @@ import threading
 import time
 
 import cv2
+import numpy as np
 from cv2_enumerate_cameras import enumerate_cameras
 from dotenv import load_dotenv
 from loguru import logger
@@ -16,8 +17,10 @@ from EnvActuator import ActuatorManager
 from MotorContol.motor_control import MotorControl
 from Sensors.packed_sensor_input import get_packed_sensor_input
 from Yolo import detect_plants, get_model
+from Common.dbscan import cluster_boxes_dbscan
 from app import run_flask_server, state as flask_state, serial_output_callback
 from app import socketio
+from Common.cluster_merge import merge_clusters_across_positions
 
 
 def main():
@@ -65,13 +68,18 @@ def job():
     motor.set_servo_angles(servo_1=0, servo_2=90, servo_3=0)
     time.sleep(5)
 
-    for i, x in enumerate(x_positions):
+    # Clear previous YOLO frame and scan data
+    flask_state['yolo_frame'] = None
+    GlobalState().scan_data = []
+
+    for i, x in enumerate(x_positions): # zig-zag pattern
         if flask_state['job_control']['should_stop']:
             logger.info("Job stopped by user")
             flask_state['job_status'] = 'stopped'
             socketio.emit('job_status', {'status': 'stopped'})
             return
         y_range = reversed(y_positions) if i % 2 else y_positions
+        time.sleep(0.5)
         for y in y_range:
             if flask_state['job_control']['should_stop']:
                 logger.info("Job stopped by user")
@@ -95,7 +103,24 @@ def job():
             results = model(frame)
             annotated_frame = results[0].plot()
 
-            clusters = detect_plants(frame)
+            # Filter out fruits (assuming class 1 is fruit, class 0 is plant)
+            if len(results[0].boxes) > 0:
+                plant_boxes = []
+                for box in results[0].boxes:
+                    if int(box.cls[0]) == 0:  # Only keep plants (class 0)
+                        plant_boxes.append(box.xyxy[0].tolist())
+            else:
+                plant_boxes = []
+
+            clusters = cluster_boxes_dbscan(plant_boxes, eps=2000, min_samples=3) if plant_boxes else []
+
+            # Save scan data
+            for cluster in clusters:
+                GlobalState().scan_data.append({
+                    'motor_position': (x, y),
+                    'cluster': cluster.tolist() if hasattr(cluster, 'tolist') else list(cluster),
+                    'detections': results[0].boxes.data.tolist() if len(results[0].boxes) > 0 else []
+                })
 
             # Draw clusters on annotated frame
             if clusters:
@@ -184,6 +209,124 @@ def job():
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
         flask_state['yolo_frame'] = annotated_frame
+
+        # Merge clusters across all positions and visualize
+        merged_clusters = merge_clusters_across_positions(GlobalState().scan_data, eps=1.5, min_samples=1)
+
+        # Filter out small clusters (1-2 detections)
+        filtered_clusters = []
+        for merged_group in merged_clusters:
+            total_detections = sum(len(cluster_data['cluster']) for cluster_data in merged_group)
+            if total_detections > 2:
+                filtered_clusters.append(merged_group)
+        merged_clusters = filtered_clusters
+
+        # Create visualization canvas
+        scale = 60
+        camera_fov_x = 1.7 * 2
+        camera_fov_y = 1.49 * 2
+        canvas_w = int((9.5 + camera_fov_x) * scale)
+        canvas_h = int((9.0 + camera_fov_y) * scale)
+        canvas = np.zeros((canvas_h, canvas_w, 3), dtype=np.uint8)
+
+        frame_w, frame_h = 640, 480
+        center_x, center_y = frame_w / 2, frame_h / 2
+
+        # Draw edges (white)
+        edge_x1 = int((0 + camera_fov_x / 2) * scale)
+        edge_y1 = int((0 + camera_fov_y / 2) * scale)
+        edge_x2 = int((9.5 + camera_fov_x / 2) * scale)
+        edge_y2 = int((9.0 + camera_fov_y / 2) * scale)
+        cv2.rectangle(canvas, (edge_x1, edge_y1), (edge_x2, edge_y2), (255, 255, 255), 2)
+
+        # Draw all detections first (gray)
+        for scan in GlobalState().scan_data:
+            motor_y, motor_x = scan['motor_position']
+            if 'detections' in scan:
+                for det in scan['detections']:
+                    x1, y1, x2, y2 = det[0], det[1], det[2], det[3]
+
+                    pixel_offset_x1 = x1 - center_x
+                    pixel_offset_y1 = y1 - center_y
+                    pixel_offset_x2 = x2 - center_x
+                    pixel_offset_y2 = y2 - center_y
+
+                    motor_offset_x1 = (pixel_offset_x1 / frame_w) * camera_fov_x
+                    motor_offset_y1 = (pixel_offset_y1 / frame_h) * camera_fov_y
+                    motor_offset_x2 = (pixel_offset_x2 / frame_w) * camera_fov_x
+                    motor_offset_y2 = (pixel_offset_y2 / frame_h) * camera_fov_y
+
+                    world_x1 = motor_x + motor_offset_x1
+                    world_y1 = 9.0 - (motor_y + motor_offset_y1)
+                    world_x2 = motor_x + motor_offset_x2
+                    world_y2 = 9.0 - (motor_y + motor_offset_y2)
+
+                    canvas_x1 = int((world_x1 + camera_fov_x / 2) * scale)
+                    canvas_y1 = int((world_y1 + camera_fov_y / 2) * scale)
+                    canvas_x2 = int((world_x2 + camera_fov_x / 2) * scale)
+                    canvas_y2 = int((world_y2 + camera_fov_y / 2) * scale)
+
+                    cv2.rectangle(canvas, (canvas_x1, canvas_y1), (canvas_x2, canvas_y2), (128, 128, 128), 1)
+
+        for i, merged_group in enumerate(merged_clusters):
+            # Draw individual clusters in world coordinates
+            for cluster_data in merged_group:
+                motor_y, motor_x = cluster_data['motor_position']
+                x1, y1, x2, y2 = cluster_data['bbox']
+
+                pixel_offset_x1 = x1 - center_x
+                pixel_offset_y1 = y1 - center_y
+                pixel_offset_x2 = x2 - center_x
+                pixel_offset_y2 = y2 - center_y
+
+                motor_offset_x1 = (pixel_offset_x1 / frame_w) * camera_fov_x
+                motor_offset_y1 = (pixel_offset_y1 / frame_h) * camera_fov_y
+                motor_offset_x2 = (pixel_offset_x2 / frame_w) * camera_fov_x
+                motor_offset_y2 = (pixel_offset_y2 / frame_h) * camera_fov_y
+
+                world_x1 = motor_x + motor_offset_x1
+                world_y1 = 9.0 - (motor_y + motor_offset_y1)
+                world_x2 = motor_x + motor_offset_x2
+                world_y2 = 9.0 - (motor_y + motor_offset_y2)
+
+                canvas_x1 = int((world_x1 + camera_fov_x / 2) * scale)
+                canvas_y1 = int((world_y1 + camera_fov_y / 2) * scale)
+                canvas_x2 = int((world_x2 + camera_fov_x / 2) * scale)
+                canvas_y2 = int((world_y2 + camera_fov_y / 2) * scale)
+
+                cv2.rectangle(canvas, (canvas_x1, canvas_y1), (canvas_x2, canvas_y2), (0, 0, 255), 2)
+
+            # Draw merged bounding box
+            all_world_coords = []
+            for cluster_data in merged_group:
+                motor_y, motor_x = cluster_data['motor_position']
+                x1, y1, x2, y2 = cluster_data['bbox']
+
+                pixel_offset_x1 = x1 - center_x
+                pixel_offset_y1 = y1 - center_y
+                pixel_offset_x2 = x2 - center_x
+                pixel_offset_y2 = y2 - center_y
+
+                motor_offset_x1 = (pixel_offset_x1 / frame_w) * camera_fov_x
+                motor_offset_y1 = (pixel_offset_y1 / frame_h) * camera_fov_y
+                motor_offset_x2 = (pixel_offset_x2 / frame_w) * camera_fov_x
+                motor_offset_y2 = (pixel_offset_y2 / frame_h) * camera_fov_y
+
+                all_world_coords.extend([
+                    (motor_x + motor_offset_x1, 9.0 - (motor_y + motor_offset_y1)),
+                    (motor_x + motor_offset_x2, 9.0 - (motor_y + motor_offset_y2))
+                ])
+
+            merged_x1 = int((min([c[0] for c in all_world_coords]) + camera_fov_x / 2) * scale)
+            merged_y1 = int((min([c[1] for c in all_world_coords]) + camera_fov_y / 2) * scale)
+            merged_x2 = int((max([c[0] for c in all_world_coords]) + camera_fov_x / 2) * scale)
+            merged_y2 = int((max([c[1] for c in all_world_coords]) + camera_fov_y / 2) * scale)
+
+            cv2.rectangle(canvas, (merged_x1, merged_y1), (merged_x2, merged_y2), (0, 255, 0), 4)
+            cv2.putText(canvas, f"Merged {i} ({len(merged_group)})", (merged_x1, merged_y1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+        flask_state['yolo_frame'] = canvas
 
         plant = recognition_agent.regocnize_plant(frame)
         logger.info(f"Plant: {plant.plant_name}, {plant.growth_stage}")
