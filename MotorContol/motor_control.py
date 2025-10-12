@@ -79,3 +79,6 @@ class MotorControl(metaclass=Singleton):
         self.current_servo_1 = s1
         self.current_servo_2 = s2
         self.current_servo_3 = s3
+
+    def get_position(self):
+        return self.current_x, self.current_y, self.current_z
