@@ -1,5 +1,5 @@
-from agent.PlantRequirements import PlantRequirementsResult
-from common import singleton
+from Agent.PlantRequirements import PlantRequirementsResult
+from Common import singleton
 
 from .watering import WateringActuator
 from .sunlight import SunlightActuator

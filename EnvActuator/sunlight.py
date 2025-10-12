@@ -2,7 +2,7 @@ import threading
 import datetime
 import time
 from loguru import logger
-from common import GlobalState
+from Common import GlobalState
 
 
 class SunlightActuator:

@@ -7,15 +7,16 @@ from cv2_enumerate_cameras import enumerate_cameras
 from dotenv import load_dotenv
 from loguru import logger
 
+from Agent.PlantRecognition import PlantRecognitionAgent
+from Agent.PlantRequirements import PlantRequirementsAgent
+from Common import GlobalState
+from Common import scheduler
 from EnvActuator import ActuatorManager
 from MotorContol.motor_control import MotorControl
-from agent.PlantRecognition import PlantRecognitionAgent
-from agent.PlantRequirements import PlantRequirementsAgent
+from Sensors.packed_sensor_input import get_packed_sensor_input
+from Yolo import detect_plants, get_model
 from app import run_flask_server, state as flask_state, serial_output_callback
-from common import GlobalState
-from common import scheduler
-from sensors.packed_sensor_input import get_packed_sensor_input
-from yolo import detect_plants, get_model
+from app import socketio
 
 
 def main():
@@ -47,7 +48,6 @@ def main():
 
 
 def job():
-    from app import socketio
     flask_state['job_status'] = 'running'
     socketio.emit('job_status', {'status': 'running'})
     logger.info("Starting job")
@@ -61,7 +61,7 @@ def job():
     y_positions = [j * step_y for j in range(int(9.0 / step_y) + 1)]
 
     motor.goto(0, 0, 0)
-    motor.set_servo_angles(servo_1=0,servo_2=90,servo_3=0)
+    motor.set_servo_angles(servo_1=0, servo_2=90, servo_3=0)
     time.sleep(5)
 
     for i, x in enumerate(x_positions):
@@ -124,7 +124,8 @@ def job():
                     normalized_distance = distance / max(frame_w, frame_h)
 
                     score = len(cluster) * (1 - normalized_distance)
-                    logger.debug(f"Position ({x}, {y}): cluster size={len(cluster)}, distance={normalized_distance:.2f}, score={score:.2f}")
+                    logger.debug(
+                        f"Position ({x}, {y}): cluster size={len(cluster)}, distance={normalized_distance:.2f}, score={score:.2f}")
 
                     if score > best_score:
                         best_score = score
@@ -151,7 +152,7 @@ def job():
         logger.debug(f"Best motor pos: {best_motor_pos}, offset: ({offset_x:.2f}, {offset_y:.2f})")
         logger.debug(f"Motor moving to ({motor_x:.2f}, {motor_y:.2f})")
         motor.goto(motor_x, motor_y, 0)
-        time.sleep(0.9)
+        time.sleep(5)
 
         logger.info(
             f"Closest cluster to center at pixel ({best_cluster_pixel[0]:.0f}, {best_cluster_pixel[1]:.0f}) -> motor ({motor_x:.2f}, {motor_y:.2f})")
@@ -168,36 +169,6 @@ def job():
 
         clusters = detect_plants(frame)
 
-        # Recalculate cluster center from current view and adjust motor position
-        if clusters:
-            frame_h, frame_w = frame.shape[:2]
-            center_x, center_y = frame_w / 2, frame_h / 2
-
-            # Find largest cluster (likely the same plant)
-            largest_cluster = max(clusters, key=len)
-            x1 = min([box[0] for box in largest_cluster])
-            y1 = min([box[1] for box in largest_cluster])
-            x2 = max([box[2] for box in largest_cluster])
-            y2 = max([box[3] for box in largest_cluster])
-            cluster_center_x = (x1 + x2) / 2
-            cluster_center_y = (y1 + y2) / 2
-
-            offset_x = (cluster_center_x - center_x) / frame_w * camera_fov_x
-            offset_y = (cluster_center_y - center_y) / frame_h * camera_fov_y
-
-            if abs(offset_x) > 0.1 or abs(offset_y) > 0.1:
-                motor_x = max(0, min(9.5, motor_x + offset_x))
-                motor_y = max(0, min(9.0, motor_y + offset_y))
-                logger.debug(f"Adjusting to center cluster: moving to ({motor_x:.2f}, {motor_y:.2f})")
-                motor.goto(motor_x, motor_y, 0)
-                time.sleep(0.9)
-
-                ret, frame = cam.read()
-                if ret:
-                    results = model(frame)
-                    annotated_frame = results[0].plot()
-                    clusters = detect_plants(frame)
-
         if clusters:
             colors = [(0, 0, 255), (0, 255, 0), (255, 0, 0), (255, 255, 0), (255, 0, 255), (0, 255, 255)]
             for i, cluster in enumerate(clusters):
@@ -210,9 +181,9 @@ def job():
                     cv2.rectangle(annotated_frame, (int(x1), int(y1)), (int(x2), int(y2)), color, 4)
                     cv2.putText(annotated_frame, f"Cluster {i} ({len(cluster)})", (int(x1), int(y1) - 15),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+
         flask_state['yolo_frame'] = annotated_frame
 
-        ret, frame = cam.read()
         plant = recognition_agent.regocnize_plant(frame)
         logger.info(f"Plant: {plant.plant_name}, {plant.growth_stage}")
 
@@ -221,7 +192,6 @@ def job():
 
         try:
             manager.update(requirements)
-
 
             flask_state['target_env'] = {
                 'watering_frequency': requirements.watering_frequency,

@@ -1,5 +1,5 @@
 from ultralytics import YOLO
-from utils.dbscan import cluster_boxes_dbscan
+from Common.dbscan import cluster_boxes_dbscan
 
 _model = None
 

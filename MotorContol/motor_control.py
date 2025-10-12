@@ -1,6 +1,8 @@
 import time
 from serial import Serial
+from Common import singleton
 
+@singleton
 class MotorControl:
     def __init__(self, port='COM3', baudrate=115200, serial_callback=None, servo_1_offset=0, servo_2_offset=0, servo_3_offset=0):
         self.current_x = 0.0
