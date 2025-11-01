@@ -42,22 +42,23 @@ class LightActuator:
             if self.light_duration > 0:
                 now = datetime.datetime.now().time()
                 if self.start_time <= now <= self.end_time:
-                    self.provide_light()
+                    self.provide_light(self.light_type)
                 else:
                     self.stop_light()
             time.sleep(60)
         logger.info("Sunlight managing loop exited.")
 
-    def provide_light(self):
+    def provide_light(self, light_type: int):
         self.is_light_on = True
         logger.info("Providing light_duration...")
         with GlobalState().serial_command_lock:
             para1 = GlobalState().serial_command[0]
-            para2 = self.light_type
+            para2 = light_type
             para3 = GlobalState().serial_command[2]
             GlobalState().serial_command = (para1, para2, para3)
             command = f"{para1},{para2},{para3}"
             self.serial.write(command.encode())
+            time.sleep(1)
 
     def stop_light(self):
         self.is_light_on = False
@@ -69,3 +70,4 @@ class LightActuator:
             GlobalState().serial_command = (para1, para2, para3)
             command = f"{para1},{para2},{para3}"
             self.serial.write(command.encode())
+            time.sleep(1)

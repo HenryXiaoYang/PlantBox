@@ -14,10 +14,11 @@ from pydantic import BaseModel, Field, ValidationError
 class PlantRecognitionResult(BaseModel):
     """Always use this tool to structure your response to the user."""
     plant_name: str = Field(description="The name of the plant.")
+    details: str = Field(description="Additional details about the plant.")
     growth_stage: str= Field(description="The growth stage of the plant.")
 
 class PlantRecognitionAgent:
-    def __init__(self, api_key: str = None, base_url: str = None, model="gemini-2.5-flash"):
+    def __init__(self, api_key: str = None, base_url: str = None, model="gemini-2.5-pro"):
         model = ChatOpenAI(base_url=base_url if base_url else os.getenv("OPENAI_API_BASE"),
                            api_key=api_key if api_key else os.getenv("OPENAI_API_KEY"),
                            model=model)
@@ -53,9 +54,6 @@ class PlantRecognitionAgent:
         if len(img_array.shape) != 3 or img_array.shape[2] != 3:
             raise ValueError("Image array must be 3D with shape (height, width, 3)")
         
-        # Convert BGR to RGB for encoding
-        rgb_array = cv2.cvtColor(img_array, cv2.COLOR_BGR2RGB)
-        
         # Encode as JPEG
         success, buffer = cv2.imencode('.jpg', img_array)
         if not success:
@@ -69,7 +67,7 @@ class PlantRecognitionAgent:
         image_data_b64 = base64.b64encode(image_data).decode("utf-8")
         messages = [
             SystemMessage(
-                """Identify the plant in the provided image and its current growth stage. Respond with a JSON object containing two keys: "plant_name" with the identified plant's common name as the value, and "growth_stage" with a description of the plant's current state (e.g., seedling, flowering, fruiting, dormant). Do not include any other text, explanation, or conversational content. The JSON object must be the sole output.\n"""),
+                """Identify the plant in the provided image and its current growth stage. Respond with a JSON object containing two keys: "plant_name" with the identified plant's common name as the value, "details" with additional information about the plant in the image, and "growth_stage" with a description of the plant's current state (e.g., seedling, flowering, fruiting, dormant). Do not include any other text, explanation, or conversational content. The JSON object must be the sole output.\n"""),
             {"role": "user", "content": [
                 {
                     "type": "text",

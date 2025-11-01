@@ -22,7 +22,7 @@ from Common.dbscan import cluster_boxes_dbscan
 from app import run_flask_server, state as flask_state, serial_output_callback
 from app import socketio
 from Common.cluster_merge import merge_clusters_across_positions
-from Jobs import experiment_1, experiment_2, job
+from Jobs import experiment_1, experiment_2, init_plant_scan, init_plant_scan, job
 
 
 def main():
@@ -31,17 +31,13 @@ def main():
     flask_thread.start()
     logger.info("Flask server started on http://0.0.0.0:5000")
 
-    experiment_2(cam, motor, flask_state, socketio)
-    while True:
-        time.sleep(1)
+    init_plant_scan(cam, motor, flask_state, socketio, recognition_agent, requirements_agent, manager)
 
-    task = scheduler.every(10).minutes.do(lambda: job(cam, motor, flask_state, socketio, recognition_agent, requirements_agent, manager))
-
+    task = scheduler.every(6).hours.do(lambda: job(cam, motor, manager, flask_state,recognition_agent, requirements_agent, socketio))
     try:
         while True:
             if flask_state['job_control'].get('run_now'):
                 flask_state['job_control']['run_now'] = False
-                experiment_1(cam, motor, flask_state, socketio)
             scheduler.run_pending()
             # Update sensor data
             temp, humidity, soil_humidity = get_packed_sensor_input()

@@ -1,7 +1,11 @@
+import base64
 import json
+import mimetypes
 import os
-from typing import Annotated
+from typing import Annotated, Union
 
+import cv2
+import numpy as np
 import requests
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
@@ -81,12 +85,43 @@ class PlantRequirementsAgent:
                         model=model)
         self._model = model.bind_tools([firecrawl_search, PlantRequirementsResult])
 
-    def get_requirements(self, plant_name: str, growth_stage: str) -> PlantRequirementsResult:
+    def get_requirements(self, plant_name: str, growth_stage: str, details: str, image_input: Union[str, np.ndarray]) -> PlantRequirementsResult:
+        mime_type = "image/jpeg"
+        if isinstance(image_input, str):
+            if not os.path.isfile(image_input):
+                raise FileNotFoundError(f"Image file not found: {image_input}")
+            with open(image_input, "rb") as img_file:
+                image_data = img_file.read()
+                mime_type = mimetypes.guess_type(image_input)[0]
+                if mime_type is None or not mime_type.startswith("image/"):
+                    raise ValueError("The provided file is not a valid image.")
+        elif isinstance(image_input, np.ndarray):
+            if len(image_input.shape) != 3 or image_input.shape[2] != 3:
+                raise ValueError("Image array must be 3D with shape (height, width, 3)")
+
+            # Encode as JPEG
+            success, buffer = cv2.imencode('.jpg', image_input)
+            if not success:
+                raise ValueError("Failed to encode image array")
+
+            image_data = buffer.tobytes()
+        else:
+            raise ValueError("Input must be either a file path (str) or numpy array")
+
+
         messages = [
             {"role": "system",
              "content": """You are a helpful expert in plant that provides detailed plant care requirements based on the plant's name and growth stage. Use the provided web search tool to gather accurate and up-to-date information. If the input is not a plant, do not use the tool. Always respond with a JSON object containing the following keys: "plant_name", "watering_frequency", "watering_amount", "light_type", "light_duration", "temperature", "fertilization_frequency", "fertilization_amount", "wind", and "explain". The values should be specific and relevant to the plant's care needs."""},
             {"role": "user",
-             "content": f"""Provide the care requirements for a plant named "{plant_name}" at its "{growth_stage}" growth stage. Use the web search tool to find relevant information if necessary."""},
+             "content": f"""Provide the care requirements for a the plant in the image named "{plant_name}" at its "{growth_stage}" growth stage.\n
+             For more details: {details}\n
+             Use the web search tool to find relevant information if necessary."""},
+            {
+                "type": "image",
+                "source_type": "base64",
+                "data": base64.b64encode(image_data).decode("utf-8"),
+                "mime_type": mime_type,
+            }
         ]
 
         response = self._model.invoke(messages)
