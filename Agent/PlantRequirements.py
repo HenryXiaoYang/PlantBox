@@ -18,10 +18,12 @@ class PlantRequirementsResult(BaseModel):
     plant_name: str = Field(description="The name of the plant.")
     watering_frequency: float = Field(description="The watering frequency of the plant, unit in once per x days.")
     watering_amount: float = Field(description="The amount of water needed each time, unit in ml.")
-    light_type: int = Field(description="The type of light required by the plant, 0 means no light needed, 1 means ultraviolet light, 2 means normal light. This field can be only 0, 1, or 2!")
+    light_type: int = Field(
+        description="The type of light required by the plant, 0 means no light needed, 1 means ultraviolet light, 2 means normal light. This field can be only 0, 1, or 2!")
     light_duration: float = Field(description="The light duration requirements of the plant, unit in x hours each day.")
     temperature: float = Field(description="The temperature requirements of the plant, unit in x degree Celsius.")
-    fertilization_frequency: float = Field(description="Fertilization frequency of the plant, unit in once per x days. 0 means no fertilization needed.")
+    fertilization_frequency: float = Field(
+        description="Fertilization frequency of the plant, unit in once per x days. 0 means no fertilization needed.")
     fertilization_amount: float = Field(description="The amount of fertilizer needed each time, unit in ml.")
     wind: float = Field(description="Wind requirements of the plant, unit in x% power. Wind is powered by a small fan.")
     explain: str = Field(description="A brief explanation of the care requirements provided above.")
@@ -78,14 +80,16 @@ def firecrawl_search(query: Annotated[str, "Search query"], firecrawl_api_key: s
 
 
 class PlantRequirementsAgent:
-    def __init__(self, api_key: str = None, base_url: str = None, firecrawl_api_key: str = None, model="gemini-2.5-flash"):
+    def __init__(self, api_key: str = None, base_url: str = None, firecrawl_api_key: str = None,
+                 model="gemini-2.5-flash"):
         self.firecrawl_api_key = firecrawl_api_key if firecrawl_api_key else os.getenv("FIRECRAWL_API_KEY")
         model = ChatOpenAI(base_url=base_url if base_url else os.getenv("OPENAI_API_BASE"),
                            api_key=api_key if api_key else os.getenv("OPENAI_API_KEY"),
-                        model=model)
+                           model=model)
         self._model = model.bind_tools([firecrawl_search, PlantRequirementsResult])
 
-    def get_requirements(self, plant_name: str, growth_stage: str, details: str, image_input: Union[str, np.ndarray]) -> PlantRequirementsResult:
+    def get_requirements(self, plant_name: str, growth_stage: str, details: str,
+                         image_input: Union[str, np.ndarray]) -> PlantRequirementsResult:
         mime_type = "image/jpeg"
         if isinstance(image_input, str):
             if not os.path.isfile(image_input):
@@ -108,20 +112,25 @@ class PlantRequirementsAgent:
         else:
             raise ValueError("Input must be either a file path (str) or numpy array")
 
-
         messages = [
             {"role": "system",
              "content": """You are a helpful expert in plant that provides detailed plant care requirements based on the plant's name and growth stage. Use the provided web search tool to gather accurate and up-to-date information. If the input is not a plant, do not use the tool. Always respond with a JSON object containing the following keys: "plant_name", "watering_frequency", "watering_amount", "light_type", "light_duration", "temperature", "fertilization_frequency", "fertilization_amount", "wind", and "explain". The values should be specific and relevant to the plant's care needs."""},
             {"role": "user",
-             "content": f"""Provide the care requirements for a the plant in the image named "{plant_name}" at its "{growth_stage}" growth stage.\n
+             "content": [
+                 {
+                     "type": "text",
+                     "text": f"""Provide the care requirements for a the plant in the image named "{plant_name}" at its "{growth_stage}" growth stage.\n
              For more details: {details}\n
-             Use the web search tool to find relevant information if necessary."""},
-            {
-                "type": "image",
-                "source_type": "base64",
-                "data": base64.b64encode(image_data).decode("utf-8"),
-                "mime_type": mime_type,
-            }
+             Use the web search tool to find relevant information if necessary.""",
+                 },
+                 {
+                     "type": "image",
+                     "source_type": "base64",
+                     "data": base64.b64encode(image_data).decode("utf-8"),
+                     "mime_type": mime_type,
+                 }
+             ]
+             }
         ]
 
         response = self._model.invoke(messages)
@@ -156,19 +165,22 @@ class PlantRequirementsAgent:
             # Get final response after tool execution
             response = self._model.invoke(messages)
 
-
             try:
                 logger.debug(f"{response.tool_calls[0]["args"]}")
                 if len(response.tool_calls) < 1:
-                    return PlantRequirementsResult(plant_name="", watering_frequency=-1, watering_amount=-1, light_type=0, light_duration=-1, temperature=-1, fertilization_frequency=-1, fertilization_amount=-1, wind=-1, explain="")
+                    return PlantRequirementsResult(plant_name="", watering_frequency=-1, watering_amount=-1,
+                                                   light_type=0, light_duration=-1, temperature=-1,
+                                                   fertilization_frequency=-1, fertilization_amount=-1, wind=-1,
+                                                   explain="")
                 result = PlantRequirementsResult.model_validate(response.tool_calls[0]["args"], strict=True)
             except Exception as e:
                 raise ValueError(f"Invalid response format: {e}")
 
             return result
 
-        return PlantRequirementsResult(plant_name="", watering_frequency=-1, watering_amount=-1, light_type=0, light_duration=-1, temperature=-1, fertilization_frequency=-1, fertilization_amount=-1, wind=-1, explain="")
-
+        return PlantRequirementsResult(plant_name="", watering_frequency=-1, watering_amount=-1, light_type=0,
+                                       light_duration=-1, temperature=-1, fertilization_frequency=-1,
+                                       fertilization_amount=-1, wind=-1, explain="")
 
 # if __name__ == "__main__":
 #     from dotenv import load_dotenv
