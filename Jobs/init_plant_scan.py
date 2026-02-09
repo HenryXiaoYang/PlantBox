@@ -27,7 +27,7 @@ def init_plant_scan(cam: cv2.VideoCapture, motor: MotorContol.MotorControl, flas
     y_positions = [j * step_y for j in range(int(9.0 / step_y) + 1)]
 
     motor.goto(0, 0, 0)
-    motor.set_servo_angles(servo_1=0, servo_2=25, servo_3=90)
+    motor.set_servo_angles(servo_1=0, servo_2=90, servo_3=0)
     time.sleep(5)
 
     # Clear previous YOLO frame and scan data

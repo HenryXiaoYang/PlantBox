@@ -2,13 +2,11 @@ import os
 import re
 import threading
 import time
-
 import cv2
 import numpy as np
 from cv2_enumerate_cameras import enumerate_cameras
 from dotenv import load_dotenv
 from loguru import logger
-
 import Common
 from Agent.PlantRecognition import PlantRecognitionAgent
 from Agent.PlantRequirements import PlantRequirementsAgent
@@ -23,7 +21,6 @@ from app import run_flask_server, state as flask_state, serial_output_callback
 from app import socketio
 from Common.cluster_merge import merge_clusters_across_positions
 from Jobs import experiment_1, experiment_2, init_plant_scan, init_plant_scan, job
-
 
 def main():
     # Start Flask server in background thread
@@ -55,7 +52,7 @@ def main():
 if __name__ == "__main__":
     load_dotenv()
 
-    ser = Common.PlantBoxSerial(port='COM7', baudrate=115200, serial_callback=serial_output_callback)
+    ser = Common.PlantBoxSerial(port='COM8', baudrate=115200, serial_callback=serial_output_callback)
 
     cam_index = -1
     for cam in enumerate_cameras():
@@ -73,8 +70,7 @@ if __name__ == "__main__":
     recognition_agent = PlantRecognitionAgent(api_key=os.getenv("OPENAI_API_KEY"),
                                               base_url=os.getenv("OPENAI_API_BASE"))
     requirements_agent = PlantRequirementsAgent(api_key=os.getenv("OPENAI_API_KEY"),
-                                                base_url=os.getenv("OPENAI_API_BASE"),
-                                                firecrawl_api_key=os.getenv("FIRECRAWL_API_KEY"))
+                                                base_url=os.getenv("OPENAI_API_BASE"))
 
     manager = ActuatorManager()
 

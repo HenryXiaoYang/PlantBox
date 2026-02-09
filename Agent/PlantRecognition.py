@@ -10,7 +10,6 @@ from langchain_core.messages import SystemMessage
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field, ValidationError
 
-
 class PlantRecognitionResult(BaseModel):
     """Always use this tool to structure your response to the user."""
     plant_name: str = Field(description="The name of the plant.")
@@ -18,10 +17,27 @@ class PlantRecognitionResult(BaseModel):
     growth_stage: str= Field(description="The growth stage of the plant.")
 
 class PlantRecognitionAgent:
-    def __init__(self, api_key: str = None, base_url: str = None, model="gemini-2.5-pro"):
-        model = ChatOpenAI(base_url=base_url if base_url else os.getenv("OPENAI_API_BASE"),
-                           api_key=api_key if api_key else os.getenv("OPENAI_API_KEY"),
-                           model=model)
+    def __init__(
+        self,
+        api_key: str = None,
+        base_url: str = None,
+        model="gemini-2.5-pro",
+        enable_llm: bool = True,
+    ):
+
+        resolved_api_key = api_key if api_key else os.getenv("OPENAI_API_KEY")
+        resolved_base_url = base_url if base_url else os.getenv("OPENAI_API_BASE")
+
+        # Allow project to start even if no API key is configured.
+        if not enable_llm or not resolved_api_key:
+            self._model = None
+            return
+
+        model = ChatOpenAI(
+            base_url=resolved_base_url,
+            api_key=resolved_api_key,
+            model=model,
+        )
         self._model = model.bind_tools([PlantRecognitionResult])
 
     def regocnize_plant(self, image_input: Union[str, np.ndarray]) -> PlantRecognitionResult:
@@ -64,6 +80,12 @@ class PlantRecognitionAgent:
     
     def _process_image_data(self, image_data: bytes, mime_type: str) -> PlantRecognitionResult:
         """Process image data and get plant recognition result"""
+        if self._model is None:
+            raise RuntimeError(
+                "PlantRecognitionAgent LLM is disabled or OPENAI_API_KEY is not set. "
+                "Set OPENAI_API_KEY to enable recognition."
+            )
+
         image_data_b64 = base64.b64encode(image_data).decode("utf-8")
         messages = [
             SystemMessage(

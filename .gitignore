@@ -9,6 +9,18 @@ docs/_book
 # TODO: where does this rule come from?
 test/
 
+# Node / Vite
+node_modules/
+frontend/node_modules/
+
+# Vite build output
+frontend/dist/
+dist/
+
+# Local env
+.env
+frontend/.env
+
 ### Python template
 # Byte-compiled / optimized / DLL files
 __pycache__/
