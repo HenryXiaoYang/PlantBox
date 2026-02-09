@@ -72,6 +72,10 @@
                 <span class="font-semibold">Servo 3:</span>
                 <span>{{ motor.servo_3.toFixed(1) }}°</span>
               </div>
+              <div class="flex justify-between">
+                <span class="font-semibold">Claw:</span>
+                <span>{{ motor.claw.toFixed(1) }}°</span>
+              </div>
             </div>
           </div>
         </div>
@@ -163,6 +167,13 @@
                     <input v-model.number="debugServo3" type="number" step="1" class="input input-sm input-bordered flex-1" />
                     <span class="text-xs opacity-70">0-180</span>
                   </div>
+                  <div class="flex gap-2 items-center">
+                    <label class="w-16">Claw:</label>
+                    <input v-model.number="debugClaw" type="number" step="1" min="0" max="60" class="input input-sm input-bordered flex-1" />
+                    <span class="text-xs opacity-70">0-60</span>
+                    <button @click="debugClaw = 0; sendMotorCommand()" class="btn btn-success btn-xs">Open</button>
+                    <button @click="debugClaw = 60; sendMotorCommand()" class="btn btn-warning btn-xs">Close</button>
+                  </div>
                   <button @click="sendMotorCommand" class="btn btn-primary btn-sm w-full">Send Command</button>
                 </div>
               </div>
@@ -197,7 +208,8 @@ const motor = ref({
   z: 0,
   servo_1: 0,
   servo_2: 0,
-  servo_3: 0
+  servo_3: 0,
+  claw: 0
 })
 
 const sensors = ref({
@@ -214,6 +226,7 @@ const debugZ = ref(0)
 const debugServo1 = ref(180)
 const debugServo2 = ref(82.5)
 const debugServo3 = ref(90)
+const debugClaw = ref(0)
 const serialCommand = ref('')
 const serialOutput = ref([])
 const jobStatus = ref('stopped')
@@ -251,7 +264,8 @@ const sendMotorCommand = async () => {
         z: debugZ.value,
         servo_1: debugServo1.value,
         servo_2: debugServo2.value,
-        servo_3: debugServo3.value
+        servo_3: debugServo3.value,
+        claw: debugClaw.value
       })
     })
     const data = await res.json()
@@ -264,11 +278,13 @@ const sendMotorCommand = async () => {
 const sendSerialCommand = async () => {
   if (!serialCommand.value.trim()) return
   try {
-    await fetch('/api/serial/command', {
+    const res = await fetch('/api/serial/command', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ command: serialCommand.value })
     })
+    const data = await res.json()
+    if (!data.success) alert(data.error)
     serialCommand.value = ''
   } catch (e) {
     alert('Error: ' + e.message)
@@ -280,7 +296,7 @@ onMounted(() => {
 
   socket.on('status_update', (data) => {
     if (data.motor) {
-      motor.value = data.motor
+      motor.value = { ...motor.value, ...data.motor }
     }
     if (data.sensors) {
       sensors.value = data.sensors

@@ -55,7 +55,7 @@ def main():
 if __name__ == "__main__":
     load_dotenv()
 
-    ser = Common.PlantBoxSerial(port='COM3', baudrate=115200, serial_callback=serial_output_callback)
+    ser = Common.PlantBoxSerial(port='COM7', baudrate=115200, serial_callback=serial_output_callback)
 
     cam_index = -1
     for cam in enumerate_cameras():

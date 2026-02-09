@@ -1,6 +1,9 @@
 from Common import Singleton, PlantBoxSerial
 
 class MotorControl(metaclass=Singleton):
+    CLAW_OPEN_ANGLE = 0.0
+    CLAW_CLOSE_ANGLE = 60.0
+
     def __init__(self, plant_box_serial:PlantBoxSerial, servo_1_offset=0, servo_2_offset=0, servo_3_offset=0):
         self.current_x = 0.0
         self.current_y = 0.0
@@ -8,6 +11,7 @@ class MotorControl(metaclass=Singleton):
         self.current_servo_1 = 180
         self.current_servo_2 = 82.5
         self.current_servo_3 = 90
+        self.current_claw = self.CLAW_OPEN_ANGLE
         self.servo_1_offset = servo_1_offset
         self.servo_2_offset = servo_2_offset
         self.servo_3_offset = servo_3_offset
@@ -22,7 +26,7 @@ class MotorControl(metaclass=Singleton):
             raise ValueError("Z coordinate out of range (0 to 1.5)")
 
 
-        command = f"{x},{y},{z},{self.current_servo_1},{self.current_servo_2},{self.current_servo_3}\n"
+        command = f"{x},{y},{z},{self.current_servo_1},{self.current_servo_2},{self.current_servo_3},{self.current_claw}\n"
         self.ser.write(command.encode())
 
         self.current_x = x
@@ -73,7 +77,7 @@ class MotorControl(metaclass=Singleton):
         elif not (0 <= s3 <= 180):
             raise ValueError(f"Servo 3 angle {s3} out of range after offset")
 
-        command = f"{self.current_x},{self.current_y},{self.current_z},{s1},{s2},{s3}\n"
+        command = f"{self.current_x},{self.current_y},{self.current_z},{s1},{s2},{s3},{self.current_claw}\n"
         self.ser.write(command.encode())
 
         self.current_servo_1 = s1
@@ -82,3 +86,19 @@ class MotorControl(metaclass=Singleton):
 
     def get_position(self):
         return self.current_x, self.current_y, self.current_z
+
+    def set_claw(self, angle: float):
+        """设置机械爪角度，0°张开，60°闭合。"""
+        if not (self.CLAW_OPEN_ANGLE <= angle <= self.CLAW_CLOSE_ANGLE):
+            raise ValueError(f"Claw angle out of range ({self.CLAW_OPEN_ANGLE} to {self.CLAW_CLOSE_ANGLE})")
+        self.current_claw = angle
+        command = f"{self.current_x},{self.current_y},{self.current_z},{self.current_servo_1},{self.current_servo_2},{self.current_servo_3},{self.current_claw}\n"
+        self.ser.write(command.encode())
+
+    def open_claw(self):
+        """机械爪完全张开（0°）。"""
+        self.set_claw(self.CLAW_OPEN_ANGLE)
+
+    def close_claw(self):
+        """机械爪完全闭合（60°）。"""
+        self.set_claw(self.CLAW_CLOSE_ANGLE)
