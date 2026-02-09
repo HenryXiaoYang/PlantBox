@@ -13,6 +13,7 @@ from Agent.PlantRequirements import PlantRequirementsAgent
 from Common import GlobalState, PlantBoxSerial
 from Common import scheduler
 from EnvActuator import ActuatorManager
+from Jobs.pick import pick
 from MotorContol.motor_control import MotorControl
 from Sensors.packed_sensor_input import get_packed_sensor_input
 from Yolo import detect_plants, get_model
@@ -28,7 +29,9 @@ def main():
     flask_thread.start()
     logger.info("Flask server started on http://0.0.0.0:5000")
 
-    init_plant_scan(cam, motor, flask_state, socketio, recognition_agent, requirements_agent, manager)
+    pick(cam, motor, manager, flask_state,recognition_agent, requirements_agent, socketio)
+
+    """init_plant_scan(cam, motor, flask_state, socketio, recognition_agent, requirements_agent, manager)
 
     task = scheduler.every(6).hours.do(lambda: job(cam, motor, manager, flask_state,recognition_agent, requirements_agent, socketio))
     try:
@@ -47,12 +50,12 @@ def main():
     except KeyboardInterrupt:
         logger.info("Shutting down...")
         GlobalState().is_shutting_down = True
-        cam.release()
+        cam.release()"""
 
 if __name__ == "__main__":
     load_dotenv()
 
-    ser = Common.PlantBoxSerial(port='COM8', baudrate=115200, serial_callback=serial_output_callback)
+    ser = Common.PlantBoxSerial(port='COM7', baudrate=115200, serial_callback=serial_output_callback)
 
     cam_index = -1
     for cam in enumerate_cameras():
