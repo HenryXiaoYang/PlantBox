@@ -6,7 +6,7 @@ _model = None
 def get_model():
     global _model
     if _model is None:
-        _model = YOLO("yolo/best.pt")
+        _model = YOLO("yolo/leaf.pt")
     return _model
 
 def detect_plants(frame):

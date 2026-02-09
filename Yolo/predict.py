@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 from sklearn.cluster import DBSCAN
 
-model = YOLO("plantyolo.engine")
+model = YOLO("leaf.pt")
 
 cap = cv2.VideoCapture(702)
 
