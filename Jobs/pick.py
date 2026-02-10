@@ -114,7 +114,12 @@ def goto_tomato_center(camera: cv2.VideoCapture, motor: MotorContol.MotorControl
             continue
 
         frame_h, frame_w = frame.shape[:2]
-        center_x, center_y = frame_w / 2, frame_h / 2
+        # center_x, center_y = frame_w / 2, frame_h / 2
+
+        center_x = frame_w / 2
+        # 修改：将目标 Y 轴坐标设为画面的 75% 处（中下方）
+        target_center_y = frame_h * 0.75 
+        center_y = frame_h / 2 # 保留原中心用于步长计算或参考
 
         # Pick the tomato closest to frame center for tracking
         target = min(tomato_boxes, key=lambda t: (t['cx'] - center_x) ** 2 + (t['cy'] - center_y) ** 2)
@@ -160,9 +165,12 @@ def pick_tomato(motor: MotorContol.MotorControl):
 
     motor.open_claw()
     time.sleep(1)
+    target_x = max(0, min(9.5, cur_x + 0.5)) 
 
-    motor.goto(cur_x, cur_y, 1.5)
+    # print("开始执行移动爪子")
+    motor.goto(target_x, cur_y+0.3, 1.3)
     time.sleep(3)
+    # print("执行完成移动爪子")
 
     motor.close_claw()
     time.sleep(1)
